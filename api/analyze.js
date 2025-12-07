@@ -1,8 +1,6 @@
-// 1. Use 'require' (Old School)
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-// 2. Use 'module.exports' instead of 'export default'
 module.exports = async (req, res) => {
   const apiKey = process.env.GOOGLE_API_KEY;
 
@@ -11,36 +9,46 @@ module.exports = async (req, res) => {
   }
 
   let tableText = "";
-  let scrapingSource = "Live Data (Chittorgarh)";
+  let scrapingSource = "Live Data (InvestorGain)";
 
   try {
-    // SCRAPE with a timeout
-    const siteUrl = 'https://www.chittorgarh.com/ipo/ipo_dashboard.asp';
+    // 1. TARGET: InvestorGain (Easier to scrape than Chittorgarh)
+    const siteUrl = 'https://www.investorgain.com/report/live-ipo-gmp/331/';
     
     const response = await axios.get(siteUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      timeout: 5000 // 5 seconds max
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+      },
+      timeout: 6000
     });
 
     const $ = cheerio.load(response.data);
-    tableText = $('.table-responsive').first().text().substring(0, 2500);
+    
+    // InvestorGain has a specific table class for GMP
+    // We grab the text from the table to feed the AI
+    tableText = $('.table-responsive').text().substring(0, 3000);
+
+    // If table is empty, throw error to trigger fallback
+    if (tableText.length < 50) throw new Error("Table was empty");
 
   } catch (scrapeError) {
     console.log("Scraping failed:", scrapeError.message);
-    scrapingSource = "AI Simulation (Scraping Failed)";
+    scrapingSource = "⚠️ AI Simulation (Source Blocked)";
     tableText = "Scraping failed. Please generate realistic simulated data for current active IPOs in India.";
   }
 
-  // THE PROMPT
+  // 2. THE PROMPT
   const promptText = `
     Context: We are tracking Indian Mainboard IPOs.
-    Source Data: """${tableText}"""
+    Source Data (Scraped from InvestorGain): """${tableText}"""
     
     Task:
-    1. Identify top 3 CURRENT or UPCOMING Mainboard IPOs.
-    2. ESTIMATE the GMP for 4 websites (Chittorgarh, IPOWatch, InvestorGain, IPO Ji).
-    3. Calculate Average GMP.
-    4. Act as Anil Singhvi: Give a verdict.
+    1. Identify top 3 CURRENT or UPCOMING Mainboard IPOs from the source data.
+    2. Extract the GMP directly from the text if available.
+    3. Since we only scraped InvestorGain, ESTIMATE the GMP for the other columns (Chittorgarh, IPOWatch, IPO Ji) to show slight realistic variations (e.g. +/- 2%).
+    4. Calculate Average GMP.
+    5. Act as Anil Singhvi: Give a verdict based on the GMP (High GMP = Apply, Low/Negative = Avoid).
 
     Output STRICTLY in this JSON format:
     {
@@ -64,7 +72,7 @@ module.exports = async (req, res) => {
     (verdict_color: 'apply', 'avoid', 'wait')
   `;
 
-  // SMART LOOP
+  // 3. SEND TO GEMINI
   const modelsToTry = ["gemini-flash-latest", "gemini-pro", "gemini-1.5-flash"];
   
   for (const modelName of modelsToTry) {
