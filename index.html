@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master IPO Dashboard</title>
+    <style>
+        body { font-family: sans-serif; background: #f4f4f9; padding: 20px; }
+        h1 { text-align: center; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #0070f3; color: white; }
+        .badge { padding: 5px 10px; border-radius: 4px; color: white; font-weight: bold; }
+        .apply { background-color: green; }
+        .avoid { background-color: red; }
+        .wait { background-color: orange; }
+        #loading { text-align: center; font-size: 18px; color: #666; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Master IPO Dashboard (AI Powered)</h1>
+        <div id="loading">🤖 AI is analyzing the market... (This takes 5-10 seconds)</div>
+        <table id="ipoTable" style="display:none;">
+            <thead>
+                <tr>
+                    <th>IPO Name</th>
+                    <th>Dates</th>
+                    <th>GMP (Avg)</th>
+                    <th>Anil Singhvi View</th>
+                    <th>Risk Analysis</th>
+                    <th>Verdict</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <!-- Data will go here -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        async function loadData() {
+            try {
+                const response = await fetch('/api/analyze');
+                const data = await response.json();
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('ipoTable').style.display = 'table';
+                
+                const tbody = document.getElementById('tableBody');
+                
+                data.ipos.forEach(ipo => {
+                    const row = `
+                        <tr>
+                            <td><strong>${ipo.name}</strong></td>
+                            <td>${ipo.dates}</td>
+                            <td>₹${ipo.gmp}</td>
+                            <td>${ipo.anil_singhvi}</td>
+                            <td>${ipo.risk}</td>
+                            <td><span class="badge ${ipo.verdict_color}">${ipo.verdict}</span></td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+            } catch (error) {
+                document.getElementById('loading').innerText = "Error loading data. Please refresh.";
+                console.error(error);
+            }
+        }
+        loadData();
+    </script>
+</body>
+</html>
