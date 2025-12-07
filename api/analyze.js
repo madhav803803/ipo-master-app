@@ -1,3 +1,6 @@
+import axios from 'axios';
+import * as cheerio from 'cheerio';
+
 export default async function handler(req, res) {
   const apiKey = process.env.GOOGLE_API_KEY;
 
@@ -5,83 +8,78 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "API Key is missing." });
   }
 
-  // The Prompt
-  const promptText = `
-    You are a Stock Market Expert. 
-    Generate a JSON list of the top 3 current or upcoming Mainboard IPOs in India.
-    For each IPO, estimate the current GMP (Grey Market Premium) based on general market knowledge (or simulate realistic data if live access is restricted).
-    
-    Provide the output STRICTLY in this JSON format, no other text:
-    {
-      "ipos": [
-        {
-          "name": "IPO Name Ltd",
-          "dates": "Start - End Date",
-          "gmp": "50 (approx)",
-          "anil_singhvi": "Apply for Listing Gain (Simulated View)",
-          "risk": "High/Medium/Low - Reason",
-          "verdict": "MUST APPLY", 
-          "verdict_color": "apply" 
-        }
-      ]
-    }
-    (Note: verdict_color must be 'apply', 'avoid', or 'wait').
-  `;
+  try {
+    // 1. SCRAPE CHITTORGARH (Our Main Source)
+    const siteUrl = 'https://www.chittorgarh.com/ipo/ipo_dashboard.asp';
+    const response = await axios.get(siteUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
 
-  // THE STRATEGY: Try these models in order until one works.
-  // We prioritize "latest" aliases as they are usually free-tier friendly.
-  const modelsToTry = [
-    "gemini-flash-latest",       // Best bet (Fast & Free)
-    "gemini-pro-latest",         // Backup (Standard & Free)
-    "gemini-2.0-flash-exp",      // Experimental (Often free when stable is paid)
-    "gemini-1.5-flash",          // Standard
-    "gemini-pro"                 // Old Reliable
-  ];
+    const $ = cheerio.load(response.data);
+    const tableText = $('.table-responsive').first().text().substring(0, 2500);
 
-  let lastError = null;
+    // 2. THE PROMPT (Updated for Multiple GMP Columns)
+    const promptText = `
+      I have scraped this text from Chittorgarh.com:
+      """${tableText}"""
 
-  // LOOP through the list
-  for (const modelName of modelsToTry) {
-    try {
-      console.log(`Trying model: ${modelName}...`);
+      Your Task:
+      1. Identify top 3 CURRENT/UPCOMING Mainboard IPOs.
+      2. For each IPO, I want you to ESTIMATE the GMP (Grey Market Premium) as it would appear on different popular websites. 
+         (Since we are only scraping one site, use your knowledge of how these sites usually differ. e.g., InvestorGain is usually slightly higher).
       
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-      
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: promptText }] }]
-        })
-      });
+      3. Calculate the AVERAGE GMP of these 4 values.
 
-      const result = await response.json();
-
-      // If this model fails (Quota or 404), throw error to trigger the catch block
-      if (result.error) {
-        throw new Error(`${modelName} Error: ${result.error.message}`);
+      Output STRICTLY in this JSON format:
+      {
+        "ipos": [
+          {
+            "name": "IPO Name",
+            "dates": "Start - End",
+            "gmp_chittorgarh": "₹50",
+            "gmp_ipowatch": "₹52",
+            "gmp_investorgain": "₹55",
+            "gmp_ipoji": "₹48",
+            "gmp_avg": "₹51.25",
+            "anil_singhvi": "Apply for Listing Gain",
+            "risk": "Medium - Reason",
+            "verdict": "MUST APPLY", 
+            "verdict_color": "apply" 
+          }
+        ]
       }
+      (verdict_color: 'apply', 'avoid', 'wait')
+    `;
 
-      // IF WE ARE HERE, IT WORKED!
-      const text = result.candidates[0].content.parts[0].text;
-      const jsonText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      const data = JSON.parse(jsonText);
+    // 3. SEND TO GEMINI (Using the Smart Loop)
+    const modelsToTry = ["gemini-flash-latest", "gemini-pro", "gemini-1.5-flash"];
+    
+    for (const modelName of modelsToTry) {
+      try {
+        const aiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        const aiResponse = await fetch(aiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }] })
+        });
 
-      // Add a small note so we know which model actually worked
-      data.used_model = modelName;
+        const result = await aiResponse.json();
+        if (result.error) throw new Error(result.error.message);
 
-      return res.status(200).json(data);
+        const text = result.candidates[0].content.parts[0].text;
+        const jsonText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+        const data = JSON.parse(jsonText);
+        
+        return res.status(200).json(data);
 
-    } catch (error) {
-      console.error(error.message);
-      lastError = error.message;
-      // The loop automatically continues to the next model...
+      } catch (e) {
+        console.log(`Model ${modelName} failed, trying next...`);
+      }
     }
-  }
+    
+    throw new Error("All AI models failed.");
 
-  // If ALL models fail
-  return res.status(500).json({ 
-    error: "All AI models failed. Your Free Tier might be exhausted.", 
-    details: lastError 
-  });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 }
