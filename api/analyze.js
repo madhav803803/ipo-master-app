@@ -28,35 +28,60 @@ export default async function handler(req, res) {
     (Note: verdict_color must be 'apply', 'avoid', or 'wait').
   `;
 
-  // WE USE THE MODEL FOUND IN YOUR LIST: gemini-2.0-flash
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  // THE STRATEGY: Try these models in order until one works.
+  // We prioritize "latest" aliases as they are usually free-tier friendly.
+  const modelsToTry = [
+    "gemini-flash-latest",       // Best bet (Fast & Free)
+    "gemini-pro-latest",         // Backup (Standard & Free)
+    "gemini-2.0-flash-exp",      // Experimental (Often free when stable is paid)
+    "gemini-1.5-flash",          // Standard
+    "gemini-pro"                 // Old Reliable
+  ];
 
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: promptText }] }]
-      })
-    });
+  let lastError = null;
 
-    const result = await response.json();
+  // LOOP through the list
+  for (const modelName of modelsToTry) {
+    try {
+      console.log(`Trying model: ${modelName}...`);
+      
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: promptText }] }]
+        })
+      });
 
-    if (result.error) {
-      throw new Error(result.error.message);
+      const result = await response.json();
+
+      // If this model fails (Quota or 404), throw error to trigger the catch block
+      if (result.error) {
+        throw new Error(`${modelName} Error: ${result.error.message}`);
+      }
+
+      // IF WE ARE HERE, IT WORKED!
+      const text = result.candidates[0].content.parts[0].text;
+      const jsonText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      const data = JSON.parse(jsonText);
+
+      // Add a small note so we know which model actually worked
+      data.used_model = modelName;
+
+      return res.status(200).json(data);
+
+    } catch (error) {
+      console.error(error.message);
+      lastError = error.message;
+      // The loop automatically continues to the next model...
     }
-
-    // Extract text
-    const text = result.candidates[0].content.parts[0].text;
-    
-    // Clean JSON (Remove markdown formatting if AI adds it)
-    const jsonText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    const data = JSON.parse(jsonText);
-
-    return res.status(200).json(data);
-
-  } catch (error) {
-    console.error("AI Error:", error);
-    return res.status(500).json({ error: error.message });
   }
+
+  // If ALL models fail
+  return res.status(500).json({ 
+    error: "All AI models failed. Your Free Tier might be exhausted.", 
+    details: lastError 
+  });
 }
