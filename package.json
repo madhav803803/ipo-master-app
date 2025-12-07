@@ -2,6 +2,8 @@
   "name": "ipo-master-app",
   "version": "1.0.0",
   "dependencies": {
-    "vercel": "^32.0.0"
+    "vercel": "^32.0.0",
+    "cheerio": "^1.0.0-rc.12",
+    "axios": "^1.6.0"
   }
 }
