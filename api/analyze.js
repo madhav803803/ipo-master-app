@@ -3,9 +3,11 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 export default async function handler(req, res) {
   // 1. Setup Google AI
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  
+  // We use the specific version "gemini-1.5-flash-001" to avoid 404 errors
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
 
-  // 2. The Prompt (The Instructions)
+  // 2. The Prompt
   const prompt = `
     You are a Stock Market Expert. 
     Generate a JSON list of the top 3 current or upcoming Mainboard IPOs in India.
@@ -29,18 +31,16 @@ export default async function handler(req, res) {
   `;
 
   try {
-    // 3. Ask Gemini
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
     
-    // 4. Clean the text to ensure it is pure JSON
     const jsonText = text.replace(/```json/g, "").replace(/```/g, "");
     const data = JSON.parse(jsonText);
 
-    // 5. Send data to website
     res.status(200).json(data);
   } catch (error) {
+    console.error("AI Error:", error);
     res.status(500).json({ error: error.message });
   }
 }
