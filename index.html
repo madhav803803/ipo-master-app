@@ -6,10 +6,10 @@
     <title>Master IPO Dashboard</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; padding: 20px; }
-        h1 { text-align: center; color: #1a1a1a; margin-bottom: 20px; }
+        h1 { text-align: center; color: #1a1a1a; margin-bottom: 10px; }
         
         .container { 
-            max-width: 1400px; /* Made wider for more columns */
+            max-width: 1400px; 
             margin: 0 auto; 
             background: white; 
             padding: 20px; 
@@ -17,18 +17,23 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
         }
 
-        /* Scrollable Table for Mobile */
-        .table-wrapper {
-            overflow-x: auto;
+        /* Source Label */
+        #source-label {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: #666;
+            font-weight: bold;
         }
+        .source-live { color: green; }
+        .source-sim { color: red; }
 
+        .table-wrapper { overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; min-width: 1000px; }
-        
         th, td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; font-size: 14px; }
         th { background-color: #0070f3; color: white; white-space: nowrap; }
         tr:hover { background-color: #f8f9fa; }
 
-        /* GMP Columns Styling */
         .gmp-col { background-color: #eef2ff; font-weight: bold; color: #444; }
         .avg-gmp { background-color: #dcfce7; color: #166534; font-weight: 800; border-left: 2px solid #fff; }
 
@@ -44,11 +49,12 @@
 <body>
     <div class="container">
         <h1>🚀 Master IPO Dashboard</h1>
+        <div id="source-label">Connecting to Source...</div>
         
         <div id="error-box"></div>
         <div id="loading">
             <div style="font-size: 40px; margin-bottom: 10px;">🤖</div>
-            AI is analyzing Chittorgarh, IPOWatch & InvestorGain...<br>
+            AI is analyzing InvestorGain Live Data...<br>
             <small>(This takes about 5-10 seconds)</small>
         </div>
 
@@ -58,13 +64,11 @@
                     <tr>
                         <th>IPO Name</th>
                         <th>Dates</th>
-                        <!-- The New GMP Columns -->
                         <th class="gmp-col">Chittorgarh</th>
                         <th class="gmp-col">IPOWatch</th>
                         <th class="gmp-col">InvestorGain</th>
                         <th class="gmp-col">IPO Ji</th>
                         <th class="avg-gmp">AVG GMP</th>
-                        <!-- Analysis -->
                         <th>Anil Singhvi View</th>
                         <th>Risk Analysis</th>
                         <th>Verdict</th>
@@ -83,14 +87,24 @@
             const errorBox = document.getElementById('error-box');
             const table = document.getElementById('ipoTable');
             const tbody = document.getElementById('tableBody');
+            const sourceLabel = document.getElementById('source-label');
 
             try {
                 const response = await fetch('/api/analyze');
                 const data = await response.json();
                 
                 if (data.error) throw new Error(data.error);
-                if (!data.ipos) throw new Error("Invalid Data Format");
                 
+                // Show Source
+                const sourceText = data.meta ? data.meta.source : "Unknown";
+                if (sourceText.includes("Simulation")) {
+                    sourceLabel.innerHTML = `🔴 DATA SOURCE: ${sourceText}`;
+                    sourceLabel.className = "source-sim";
+                } else {
+                    sourceLabel.innerHTML = `🟢 DATA SOURCE: ${sourceText}`;
+                    sourceLabel.className = "source-live";
+                }
+
                 loading.style.display = 'none';
                 table.style.display = 'table';
                 
