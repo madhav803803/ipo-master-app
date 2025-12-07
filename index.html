@@ -16,12 +16,16 @@
         .avoid { background-color: red; }
         .wait { background-color: orange; }
         #loading { text-align: center; font-size: 18px; color: #666; margin-top: 20px; }
+        #error-box { color: red; background: #ffe6e6; padding: 15px; border-radius: 5px; margin-top: 20px; display: none; border: 1px solid red; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🚀 Master IPO Dashboard (AI Powered)</h1>
-        <div id="loading">🤖 AI is analyzing the market... (This takes 5-10 seconds)</div>
+        
+        <div id="loading">🤖 AI is analyzing the market... (Please wait 10s)</div>
+        <div id="error-box"></div>
+
         <table id="ipoTable" style="display:none;">
             <thead>
                 <tr>
@@ -41,14 +45,28 @@
 
     <script>
         async function loadData() {
+            const loading = document.getElementById('loading');
+            const errorBox = document.getElementById('error-box');
+            const table = document.getElementById('ipoTable');
+            const tbody = document.getElementById('tableBody');
+
             try {
                 const response = await fetch('/api/analyze');
                 const data = await response.json();
                 
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('ipoTable').style.display = 'table';
+                // If the backend sent an error message
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // If the data format is wrong
+                if (!data.ipos || !Array.isArray(data.ipos)) {
+                    throw new Error("AI returned invalid data format: " + JSON.stringify(data));
+                }
                 
-                const tbody = document.getElementById('tableBody');
+                // Success! Show table
+                loading.style.display = 'none';
+                table.style.display = 'table';
                 
                 data.ipos.forEach(ipo => {
                     const row = `
@@ -63,8 +81,12 @@
                     `;
                     tbody.innerHTML += row;
                 });
+
             } catch (error) {
-                document.getElementById('loading').innerText = "Error loading data. Please refresh.";
+                loading.style.display = 'none';
+                table.style.display = 'none';
+                errorBox.style.display = 'block';
+                errorBox.innerHTML = `<strong>⚠️ Error:</strong> ${error.message}<br><br><em>Tip: Check your Vercel Environment Variables.</em>`;
                 console.error(error);
             }
         }
